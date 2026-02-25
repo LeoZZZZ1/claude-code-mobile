@@ -1,0 +1,24 @@
+{
+  "name": "claude-code-mobile",
+  "version": "1.0.0",
+  "description": "A private mobile web interface for Claude Code — use Anthropic's AI coding tool from your phone",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "mobile",
+    "ai",
+    "coding"
+  ],
+  "author": "Lior Revivo (https://il.linkedin.com/in/revivolior)",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "ws": "^8.0.0"
+  }
+}
