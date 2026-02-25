@@ -1,18 +1,11 @@
 # Claude Code Mobile 📱
 
-A private, self-hosted mobile web interface for [Claude Code](https://claude.ai/code) — use Anthropic’s AI coding tool from your iPhone or Android, anywhere.
+A private, self-hosted mobile web interface for [Claude Code](https://claude.ai/code) — use Anthropic's AI coding tool from your iPhone or Android, anywhere.
 
 > Built by [Lior Revivo](https://il.linkedin.com/in/revivolior)
 
------
 
-## What it looks like
-
-|Chat                         |Live tool activity                           |Slash commands                                   |Settings                                     |
-|-----------------------------|---------------------------------------------|-------------------------------------------------|---------------------------------------------|
-|Real-time streaming responses|Watch Claude work with live tool call counter|`/effort`, `/model`, `/plan`, `/compact` and more|Model picker, agents, plan mode, file browser|
-
------
+---
 
 ## Features
 
@@ -28,7 +21,7 @@ A private, self-hosted mobile web interface for [Claude Code](https://claude.ai/
 - 📊 **Context bar** — live token usage indicator
 - 🔒 **Password protected** — only accessible to you via Tailscale
 
------
+---
 
 ## Prerequisites
 
@@ -38,7 +31,7 @@ A private, self-hosted mobile web interface for [Claude Code](https://claude.ai/
 - **unbuffer** (`brew install expect`)
 - **Tailscale** on both your Mac and phone ([tailscale.com](https://tailscale.com))
 
------
+---
 
 ## Setup
 
@@ -87,11 +80,11 @@ Make sure Tailscale is running on both devices, then open your phone browser and
 http://<your-mac-tailscale-ip>:3000
 ```
 
-Your Mac’s Tailscale IP looks like `100.x.x.x` — find it in the Tailscale app.
+Your Mac's Tailscale IP looks like `100.x.x.x` — find it in the Tailscale app.
 
-> **Tip:** tap Share → “Add to Home Screen” in Safari for an app-like experience.
+> **Tip:** tap Share → "Add to Home Screen" in Safari for an app-like experience.
 
------
+---
 
 ## Auto-start on Mac boot
 
@@ -137,7 +130,7 @@ To restart after changes:
 launchctl stop com.claudemobile.server && launchctl start com.claudemobile.server
 ```
 
------
+---
 
 ## Custom Agents
 
@@ -154,20 +147,20 @@ You are a thorough code reviewer. Focus on correctness, security vulnerabilities
 performance issues, and code clarity. Always suggest specific improvements.
 ```
 
------
+---
 
 ## Security
 
-- The server binds to `0.0.0.0` but is only reachable via Tailscale’s encrypted tunnel
+- The server binds to `0.0.0.0` but is only reachable via Tailscale's encrypted tunnel
 - Password is required on every new browser session
 - `.env` is gitignored — never committed
 - `sessions.json` is gitignored — stays on your Mac
 
------
+---
 
 ## Troubleshooting
 
-**Can’t connect from phone**
+**Can't connect from phone**
 Make sure Tailscale is running on both devices. Check the server is running: `launchctl list | grep claudemobile`
 
 **Password not accepted**
@@ -176,12 +169,12 @@ Check `~/claude-code-mobile/.env` — the line should read `CLAUDE_PASSWORD=your
 **Claude stops mid-task**
 Context window may be full. Type `/compact` to summarize and continue, or start a new session.
 
------
+---
 
 ## License
 
-MIT — see <LICENSE>
+MIT — see [LICENSE](LICENSE)
 
------
+---
 
 *Built by [Lior Revivo](https://il.linkedin.com/in/revivolior)*
