@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Environment — NEVER commit this, it contains your password
+.env
+
+# Session data — personal, contains your conversation history
+sessions.json
+
+# Uploaded files
+uploads/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
