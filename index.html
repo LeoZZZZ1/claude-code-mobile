@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <title>Claude Code</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d0d0d; --surface: #1a1a1a; --surface2: #222; --surface3: #2a2a2a;
+      --border: #2a2a2a; --text: #e8e8e8; --muted: #666; --accent: #d97757;
+      --accent2: #b85c38; --user-bg: #1a2535; --user-text: #b8d0ee;
+      --tool-bg: #141a14; --tool-border: #253025; --tool-text: #6eb86e;
+      --error-bg: #1f1212; --error-border: #3d1f1f; --error-text: #d47070;
+      --green: #4caf50; --radius: 18px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    /* ── Login ── */
+    #login-screen {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 32px 24px; background: var(--bg); z-index: 200;
+    }
+    #login-screen.hidden { display: none; }
+    .login-logo { width: 64px; height: 64px; border-radius: 16px; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 24px; }
+    .login-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .login-sub { color: var(--muted); font-size: 14px; margin-bottom: 32px; text-align: center; }
+    #password-input { width: 100%; max-width: 320px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; color: var(--text); font-size: 16px; font-family: inherit; outline: none; margin-bottom: 12px; -webkit-appearance: none; }
+    #password-input:focus { border-color: var(--accent); }
+    #login-btn { width: 100%; max-width: 320px; background: var(--accent); color: white; border: none; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 600; cursor: pointer; -webkit-appearance: none; }
+    .login-error { color: var(--error-text); font-size: 13px; margin-top: 10px; display: none; }
+    .login-error.visible { display: block; }
+
+    /* ── App: fixed full screen, flex column ── */
+    #app {
+      display: none;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+    }
+    #app.visible { display: flex; }
+
+    /* ── Header: fixed height, no shrink ── */
+    header {
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      padding-top: calc(10px + var(--safe-top));
+      border-bottom: 1px solid var(--border);
+      background: rgba(13,13,13,0.97);
+      gap: 8px;
+    }
+    .header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .header-icon { width: 28px; height: 28px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .header-title { font-size: 15px; font-weight: 600; white-space: nowrap; }
+    .status-pill { display: flex; align-items: center; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 4px 9px; font-size: 11px; color: var(--muted); flex-shrink: 0; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #444; transition: background 0.3s; flex-shrink: 0; }
+    .status-dot.connected { background: var(--green); }
+    .status-dot.thinking { background: var(--accent); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+    #settings-btn { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 4px; flex-shrink: 0; }
+
+    /* ── Banner ── */
+    #banner { display: none; flex-shrink: 0; background: #221a08; color: #e0a030; text-align: center; font-size: 13px; padding: 7px; }
+    #banner.visible { display: block; }
+
+    /* ── Tabs ── */
+    #tabs-bar {
+      flex-shrink: 0;
+      display: flex; align-items: center;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      overflow-x: auto; -webkit-overflow-scrolling: touch;
+      padding: 0 4px; scrollbar-width: none;
+    }
+    #tabs-bar::-webkit-scrollbar { display: none; }
+    .tab { display: flex; align-items: center; gap: 6px; padding: 9px 12px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; transition: all 0.15s; flex-shrink: 0; }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .tab .tab-close { font-size: 14px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0; line-height: 1; margin-left: 2px; }
+    .tab .tab-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: none; }
+    .tab.thinking .tab-dot { display: block; animation: pulse 1s infinite; }
+    #new-tab-btn { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; padding: 8px 10px; flex-shrink: 0; line-height: 1; }
+
+    /* ── Panes: takes all remaining space ── */
+    #panes {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+    .pane {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex; flex-direction: column;
+      visibility: hidden;
+    }
+    .pane.active { visibility: visible; }
+
+    /* ── Messages: scrollable, fills pane ── */
+    .messages {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+
+    /* ── Message bubbles ── */
+    .msg { max-width: 90%; animation: fadeUp 0.15s ease; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(5px)} }
+    .msg.user { align-self: flex-end; }
+    .msg.claude { align-self: flex-start; }
+    .msg.system { align-self: center; max-width: 100%; }
+    .bubble { padding: 10px 14px; border-radius: var(--radius); word-break: break-word; overflow-wrap: anywhere; }
+    .msg.user .bubble { background: var(--user-bg); color: var(--user-text); border-bottom-right-radius: 4px; }
+    .msg.claude .bubble { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+    .msg.system .bubble { background: transparent; color: var(--muted); font-size: 12px; text-align: center; }
+    .msg.error .bubble { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); font-size: 13px; }
+    .bubble strong { font-weight: 600; }
+    .bubble em { font-style: italic; }
+    .bubble code { font-family: 'SF Mono','Fira Code',monospace; font-size: 12.5px; background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; }
+    .bubble pre { background: #0a0a0a; border: 1px solid var(--border); border-radius: 10px; padding: 12px; overflow-x: auto; margin: 8px 0; font-size: 12px; white-space: pre; }
+    .bubble pre code { background: none; padding: 0; }
+    .bubble p + p { margin-top: 8px; }
+    .tool-pill { display: flex; align-items: flex-start; gap: 5px; background: var(--tool-bg); border: 1px solid var(--tool-border); border-radius: 8px; padding: 6px 9px; font-size: 11px; color: var(--tool-text); font-family: 'SF Mono',monospace; margin: 3px 0; max-width: 100%; cursor: pointer; word-break: break-all; }
+    .tool-pill::before { content: '⚙'; flex-shrink: 0; margin-top: 1px; }
+    .tool-pill .pill-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .tool-pill.expanded .pill-text { white-space: pre-wrap; }
+    .tool-pill .pill-arrow { flex-shrink: 0; color: var(--muted); margin-left: 4px; transition: transform 0.15s; }
+    .tool-pill.expanded .pill-arrow { transform: rotate(180deg); }
+    .typing { display: flex; gap: 4px; padding: 12px 14px; }
+    .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bounce 1.1s infinite; }
+    .typing span:nth-child(2) { animation-delay: .18s; }
+    .typing span:nth-child(3) { animation-delay: .36s; }
+    @keyframes bounce { 0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)} }
+
+    /* ── Attach preview ── */
+    #attach-preview { flex-shrink: 0; display: none; flex-wrap: wrap; gap: 6px; padding: 7px 12px; border-top: 1px solid var(--border); background: var(--surface); }
+    #attach-preview.visible { display: flex; }
+    .attach-chip { display: flex; align-items: center; gap: 5px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 12px; }
+    .attach-chip img { width: 22px; height: 22px; object-fit: cover; border-radius: 3px; }
+    .attach-chip button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0; line-height: 1; }
+
+    /* ── Input area: fixed height, no shrink ── */
+    #input-area {
+      flex-shrink: 0;
+      display: flex; align-items: flex-end; gap: 7px;
+      padding: 9px 12px;
+      padding-bottom: max(9px, var(--safe-bottom));
+      border-top: 1px solid var(--border);
+      background: rgba(13,13,13,0.97);
+    }
+    #input-wrap { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; display: flex; align-items: flex-end; padding: 9px 14px; }
+    #input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-size: 16px; font-family: inherit; resize: none; min-height: 22px; max-height: 130px; line-height: 22px; -webkit-appearance: none; }
+    #input::placeholder { color: var(--muted); }
+    .icon-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--surface2); color: var(--muted); font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; -webkit-appearance: none; }
+    #send-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--accent); color: white; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; -webkit-appearance: none; touch-action: manipulation; }
+    #send-btn:disabled { opacity: 0.3; pointer-events: none; }
+    #send-btn.cancel { background: #e05a5a; width: 40px; height: 40px; font-size: 17px; }
+
+
+    /* ── Settings panel ── */
+    #settings-panel { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 150; display: flex; align-items: flex-end; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    #settings-panel.visible { opacity: 1; pointer-events: all; }
+    .settings-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 20px; width: 100%; max-width: 480px; transform: translateY(100%); transition: transform 0.25s; padding-bottom: max(20px, var(--safe-bottom)); max-height: 80vh; overflow-y: auto; }
+    #settings-panel.visible .settings-card { transform: translateY(0); }
+    .settings-title { font-size: 16px; font-weight: 700; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+    .settings-close { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; }
+    .settings-section { margin-bottom: 16px; }
+    .settings-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; color: var(--muted); margin-bottom: 8px; }
+    .settings-row { display: flex; gap: 8px; }
+    .ctrl-btn { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 14px; font-weight: 500; cursor: pointer; }
+    .ctrl-btn.danger { color: var(--error-text); border-color: var(--error-border); }
+    .ctrl-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    .server-status { font-size: 13px; color: var(--muted); background: var(--surface2); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+
+    #file-input { display: none; }
+
+    /* ── Plan mode approval ── */
+    .plan-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .plan-approve { flex: 1; padding: 10px; border-radius: 10px; border: none; background: var(--green); color: white; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .plan-reject  { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--error-border); background: var(--error-bg); color: var(--error-text); font-size: 14px; font-weight: 600; cursor: pointer; }
+
+    /* ── Context bar ── */
+    #context-bar { flex-shrink: 0; height: 3px; background: var(--surface2); display: none; }
+    #context-fill { height: 100%; background: var(--accent); transition: width 0.5s; width: 0%; }
+
+    /* ── Agent badge on tab ── */
+    .tab .agent-badge { font-size: 9px; background: var(--accent); color: white; border-radius: 4px; padding: 1px 4px; margin-left: 2px; }
+
+    /* ── Slash command menu ── */
+    #cmd-menu {
+      position: absolute; bottom: 100%; left: 0; right: 0;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 14px 14px 0 0; overflow: hidden;
+      display: none; flex-direction: column;
+      box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+      max-height: 320px; overflow-y: auto;
+      z-index: 50;
+    }
+    #cmd-menu.visible { display: flex; }
+    .cmd-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    .cmd-item:last-child { border-bottom: none; }
+    .cmd-item:hover, .cmd-item.selected { background: var(--surface3); }
+    .cmd-name { font-size: 14px; font-weight: 600; color: var(--accent); font-family: 'SF Mono', monospace; white-space: nowrap; }
+    .cmd-desc { font-size: 12px; color: var(--muted); }
+    .cmd-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-logo">⌨</div>
+  <div class="login-title">Claude Code</div>
+  <div class="login-sub">Enter your password to connect to your Mac</div>
+  <input id="password-input" type="password" placeholder="Password" autocomplete="current-password"/>
+  <button id="login-btn">Connect</button>
+  <div class="login-error" id="login-error">Incorrect password. Try again.</div>
+</div>
+
+<!-- App: header → banner → tabs → panes → attach → input -->
+<div id="app">
+
+  <header>
+    <div class="header-left">
+      <div class="header-icon">⌨</div>
+      <div class="header-title">Claude Code</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="status-pill">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">—</span>
+      </div>
+      <button id="settings-btn">⚙</button>
+    </div>
+  </header>
+
+  <div id="banner">⚠ Disconnected — reconnecting…</div>
+
+  <div id="tabs-bar">
+    <button id="new-tab-btn">+</button>
+  </div>
+
+  <div id="context-bar"><div id="context-fill"></div></div>
+
+  <div id="panes"></div>
+
+  <div id="attach-preview"></div>
+
+  <div style="position:relative">
+    <div id="cmd-menu"></div>
+  <div id="input-area">
+    <div id="input-wrap">
+      <textarea id="input" rows="1" placeholder="Message…" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false"></textarea>
+    </div>
+    <button class="icon-btn" id="attach-btn">📎</button>
+    <button id="send-btn" disabled>↑</button>
+    <input type="file" id="file-input" accept="image/*,.pdf,.txt,.js,.ts,.py,.md,.json,.csv"/>
+  </div>
+  </div>
+
+</div>
+
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ── DOM refs ───────────────────────────────────────────
+const loginScreen  = $('login-screen');
+const pwInput      = $('password-input');
+const loginBtn     = $('login-btn');
+const loginError   = $('login-error');
+const app          = $('app');
+const statusDot    = $('status-dot');
+const statusText   = $('status-text');
+const banner       = $('banner');
+const tabsBar      = $('tabs-bar');
+const newTabBtn    = $('new-tab-btn');
+const panes        = $('panes');
+const inputEl      = $('input');
+const sendBtn      = $('send-btn');
+const attachBtn    = $('attach-btn');
+const fileInput    = $('file-input');
+const attachPrev   = $('attach-preview');
+const settingsBtn  = $('settings-btn');
+
+// ── State ──────────────────────────────────────────────
+let ws = null;
+let authenticated = false;
+let activeTabId = null;
+const tabs = new Map(); // id → tab object
+
+// ── WebSocket ──────────────────────────────────────────
+function connect() {
+  ws = new WebSocket(`ws://${location.host}`);
+  let heartbeatInterval = null;
+  let pongTimeout = null;
+
+  ws.onopen = () => {
+    banner.classList.remove('visible');
+    setStatus('', 'Authenticating…');
+    heartbeatInterval = setInterval(() => {
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'ping' }));
+        pongTimeoutRef = setTimeout(() => { console.warn('Heartbeat timeout'); ws.close(); }, 5000);
+      }
+    }, 15000);
+  };
+
+  ws.onclose = () => {
+    clearInterval(heartbeatInterval);
+    clearTimeout(pongTimeoutRef);
+    setStatus('', 'Disconnected');
+    banner.classList.add('visible');
+    sendBtn.disabled = true;
+    setTimeout(connect, 2500);
+  };
+
+  ws.onerror = () => ws.close();
+  ws.onmessage = ({data}) => { let m; try{m=JSON.parse(data);}catch{return;} handle(m); };
+}
+
+let pongTimeoutRef = null;
+function wsSend(obj) { if(ws?.readyState===1) ws.send(JSON.stringify(obj)); }
+
+// ── Auth ───────────────────────────────────────────────
+loginBtn.addEventListener('click', () => {
+  const pw = pwInput.value.trim(); if(!pw) return;
+  loginError.classList.remove('visible');
+  wsSend({type:'auth', password:pw});
+});
+pwInput.addEventListener('keydown', e => { if(e.key==='Enter') loginBtn.click(); });
+
+// ── Message handler ────────────────────────────────────
+function handle(msg) {
+  switch(msg.type) {
+    case 'pong': clearTimeout(pongTimeoutRef); break;
+
+    case 'auth_ok':
+      authenticated = true;
+      loginScreen.classList.add('hidden');
+      app.classList.add('visible');
+      sendBtn.disabled = false;
+      setStatus('connected', 'Connected');
+      if (msg.sessions && msg.sessions.length > 0) {
+        msg.sessions.forEach(s => restoreSession(s));
+      } else {
+        createTab();
+      }
+      break;
+
+    case 'auth_fail':
+      loginError.classList.add('visible');
+      break;
+
+    case 'token': {
+      const tab = tabByKey(msg.sessionKey); if(!tab) break;
+      removeTyping(tab);
+      if (!tab.currentBubble) tab.currentBubble = createBubble(tab, 'claude');
+      const raw = (tab.currentBubble.dataset.raw || '') + msg.text;
+      tab.currentBubble.dataset.raw = raw;
+      tab.currentBubble.innerHTML = renderMd(raw);
+      scrollToBottom(tab);
+      break;
+    }
+
+    case 'tool_use': {
+      const tab = tabByKey(msg.sessionKey); if(!tab) break;
+      removeTyping(tab);
+      if (!tab.currentBubble) tab.currentBubble = createBubble(tab, 'claude');
+      appendTool(tab.currentBubble, msg.name, msg.input, msg.id);
+      // Re-add typing after pill so it stays at bottom
+      addTyping(tab);
+      updateToolActivity(tab, msg.name);
+      scrollToBottom(tab);
+      break;
+    }
+
+    case 'tool_result': {
+      const tab = tabByKey(msg.sessionKey); if(!tab) break;
+      // Find the pill by tool_use_id and store result for expansion
+      const msgs = document.querySelector(`.messages[data-tab-id="${tab.id}"]`);
+      if(!msgs) break;
+      const pill = msgs.querySelector(`.tool-pill[data-tool-id="${msg.tool_use_id}"]`);
+      if(pill) {
+        pill.dataset.result = msg.content;
+        // If collapsed, add ✓ indicator
+        if(!pill.classList.contains('expanded')) {
+          const arrow = pill.querySelector('.pill-arrow');
+          if(arrow && !pill.querySelector('.result-check')) {
+            const check = document.createElement('span');
+            check.className = 'result-check';
+            check.style.cssText = 'color:var(--green);font-size:10px;flex-shrink:0;margin-left:4px';
+            check.textContent = '✓';
+            arrow.before(check);
+          }
+        }
+      }
+      break;
+    }
+
+    case 'done': {
+      const tab = tabByKey(msg.sessionKey); if(!tab) break;
+      removeTyping(tab); setTabThinking(tab, false); stopThinkingTimer(); tab.currentBubble = null;
+      if(msg.error) addSys(tab, '⚠ Claude exited with an error');
+      if(msg.subtype === 'cancelled') addSys(tab, 'Cancelled');
+      updateSendBtn(); break;
+    }
+
+    case 'error': {
+      const tab = tabByKey(msg.sessionKey); if(!tab) break;
+      removeTyping(tab); setTabThinking(tab, false); stopThinkingTimer(); tab.currentBubble = null;
+      addMsg(tab, 'error', msg.text); updateSendBtn(); break;
+    }
+
+    case 'sys_msg': {
+      const tab = tabByKey(msg.sessionKey); if(!tab) break;
+      removeTyping(tab);
+      // Highlight rate limit messages specially
+      const isLimit = /hit your limit|rate limit|usage limit|resets/i.test(msg.text);
+      const display = isLimit ? `⏳ ${msg.text}` : `ℹ ${msg.text}`;
+      addSys(tab, display);
+      break;
+    }
+
+    case 'session_killed': {
+      const tab = tabByKey(msg.sessionKey);
+      if(tab) {
+        removeTyping(tab); setTabThinking(tab, false); stopThinkingTimer();
+        tab.currentBubble = null;
+        addSys(tab, '⏹ Session terminated');
+        updateSendBtn();
+      }
+      break;
+    }
+
+    case 'session_init': {
+      const tab = tabByKey(msg.sessionKey);
+      if(tab) { tab.claudeSessionId = msg.sessionId; }
+      break;
+    }
+
+    case 'agents_list': {
+      renderAgents(msg.agents);
+      break;
+    }
+
+    case 'agent_saved': {
+      addSys(activeTab(), `🤖 Agent "${msg.name}" saved`);
+      loadAgents();
+      break;
+    }
+
+    case 'plan_waiting': {
+      const tab = tabByKey(msg.sessionKey); if(!tab) break;
+      removeTyping(tab); setTabThinking(tab, false); stopThinkingTimer();
+      // Add approve/reject buttons after the current bubble
+      const msgs = document.querySelector(`.messages[data-tab-id="${tab.id}"]`);
+      if(msgs) {
+        const div = document.createElement('div');
+        div.className = 'msg system';
+        div.id = `plan-actions-${tab.id}`;
+        div.innerHTML = `<div style="width:100%">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;text-align:center">📋 Claude is waiting for plan approval</div>
+          <div class="plan-actions">
+            <button class="plan-approve" onclick="approvePlan('${tab.sessionKey}','${tab.id}')">✓ Approve & Execute</button>
+            <button class="plan-reject"  onclick="rejectPlan('${tab.sessionKey}','${tab.id}')">✗ Reject</button>
+          </div>
+        </div>`;
+        msgs.appendChild(div);
+        scrollToBottom(tab);
+      }
+      updateSendBtn();
+      break;
+    }
+
+    case 'usage': {
+      const bar = $('context-bar');
+      const fill = $('context-fill');
+      if(!bar || !fill) break;
+      const pct = Math.min(100, Math.round((msg.inputTokens / msg.contextLimit) * 100));
+      bar.style.display = 'block';
+      fill.style.width = pct + '%';
+      fill.style.background = pct > 80 ? '#e05a5a' : pct > 60 ? '#e0a030' : 'var(--accent)';
+      fill.title = `${msg.inputTokens.toLocaleString()} / ${msg.contextLimit.toLocaleString()} tokens (${pct}%)`;
+      break;
+    }
+  } // end switch
+} // end handle()
+
+// ── Plan mode approval ─────────────────────────────────
+window.approvePlan = (sessionKey, tabId) => {
+  document.getElementById(`plan-actions-${tabId}`)?.remove();
+  const tab = tabByKey(sessionKey); if(!tab) return;
+  wsSend({ type: 'plan_approve', sessionKey });
+  addSys(tab, '✓ Plan approved — executing…');
+  setTabThinking(tab, true);
+  addTyping(tab);
+  startThinkingTimer();
+  updateSendBtn();
+};
+
+window.rejectPlan = (sessionKey, tabId) => {
+  document.getElementById(`plan-actions-${tabId}`)?.remove();
+  const tab = tabByKey(sessionKey); if(!tab) return;
+  wsSend({ type: 'plan_reject', sessionKey });
+  addSys(tab, '✗ Plan rejected');
+  updateSendBtn();
+};
+let tabCounter = 0;
+
+function nextTabNumber() {
+  // Find the highest session number in use, start from 1 if none
+  let max = 0;
+  for (const t of tabs.values()) {
+    const m = t.label.match(/^Session (\d+)$/);
+    if (m) max = Math.max(max, +m[1]);
+  }
+  return max + 1;
+}
+
+function createTab(label, opts = {}) {
+  const num = nextTabNumber();
+  const id = ++tabCounter;
+  const tabLabel = label || `Session ${num}`;
+  const sessionKey = `s_${Date.now()}_${id}`;
+  const tab = { id, label: tabLabel, sessionKey, thinking: false, currentBubble: null, typingEl: null, attachments: [], model: opts.model || 'claude-sonnet-4-6', effort: opts.effort || 'high', planMode: opts.planMode || false, agentName: opts.agentName || null };
+  tabs.set(id, tab);
+
+  // Tab button
+  const tabEl = document.createElement('div');
+  tabEl.className = 'tab';
+  tabEl.dataset.tabId = id;
+  tabEl.innerHTML = `<span class="tab-dot"></span><span>${esc(tabLabel)}</span><button class="tab-close" data-tab-id="${id}">×</button>`;
+  tabEl.addEventListener('click', e => { if(!e.target.classList.contains('tab-close')) switchTab(id); });
+  tabEl.querySelector('.tab-close').addEventListener('click', e => { e.stopPropagation(); closeTab(id); });
+  tabsBar.insertBefore(tabEl, newTabBtn);
+
+  // Pane
+  const pane = document.createElement('div');
+  pane.className = 'pane';
+  pane.dataset.tabId = id;
+  const msgs = document.createElement('div');
+  msgs.className = 'messages';
+  msgs.dataset.tabId = id;
+  pane.appendChild(msgs);
+  panes.appendChild(pane);
+
+  switchTab(id);
+  wsSend({ type: 'new_session', sessionKey, label: tabLabel, planMode: tab.planMode, agentName: tab.agentName });
+  const modeNote = tab.planMode ? ' · 📋 Plan mode ON' : '';
+  const agentNote = tab.agentName ? ` · 🤖 Agent: ${tab.agentName}` : '';
+  addSys(tab, `New session started${modeNote}${agentNote}`);
+  return tab;
+}
+
+function switchTab(id) {
+  activeTabId = id;
+  document.querySelectorAll('.tab').forEach(el => el.classList.toggle('active', +el.dataset.tabId === id));
+  document.querySelectorAll('.pane').forEach(el => el.classList.toggle('active', +el.dataset.tabId === id));
+  updateSendBtn();
+}
+
+function closeTab(id) {
+  const tab = tabs.get(id);
+  if(tab) wsSend({ type: 'kill_session', sessionKey: tab.sessionKey });
+  tabs.delete(id);
+  document.querySelector(`.tab[data-tab-id="${id}"]`)?.remove();
+  document.querySelector(`.pane[data-tab-id="${id}"]`)?.remove();
+  if(activeTabId === id) {
+    const remaining = [...tabs.keys()];
+    if(remaining.length > 0) switchTab(remaining[remaining.length - 1]);
+    else createTab();
+  }
+}
+
+function activeTab() { return tabs.get(activeTabId); }
+function tabByKey(key) { return [...tabs.values()].find(t => t.sessionKey === key); }
+
+newTabBtn.addEventListener('click', () => createTab());
+
+// ── Messages ───────────────────────────────────────────
+function addMsg(tab, role, text) {
+  const msgs = document.querySelector(`.messages[data-tab-id="${tab.id}"]`);
+  if(!msgs) return null;
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.innerHTML = role === 'user' ? esc(text) : renderMd(text);
+  div.appendChild(b);
+  msgs.appendChild(div);
+  scrollToBottom(tab);
+  return b;
+}
+
+function addSys(tab, text) {
+  const msgs = document.querySelector(`.messages[data-tab-id="${tab.id}"]`);
+  if(!msgs) return;
+  const div = document.createElement('div');
+  div.className = 'msg system';
+  div.innerHTML = `<div class="bubble">${esc(text)}</div>`;
+  msgs.appendChild(div);
+  scrollToBottom(tab);
+}
+
+function createBubble(tab, role) {
+  const msgs = document.querySelector(`.messages[data-tab-id="${tab.id}"]`);
+  if(!msgs) return null;
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.dataset.raw = '';
+  div.appendChild(b);
+  msgs.appendChild(div);
+  return b;
+}
+
+function addTyping(tab) {
+  if(tab.typingEl) return;
+  const msgs = document.querySelector(`.messages[data-tab-id="${tab.id}"]`);
+  if(!msgs) return;
+  const div = document.createElement('div');
+  div.className = 'msg claude';
+  div.innerHTML = `<div class="bubble" style="display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="typing"><span></span><span></span><span></span></div>
+      <span class="typing-timer" id="tt_${tab.id}" style="font-size:11px;color:var(--muted);font-family:'SF Mono',monospace;flex-shrink:0">0s</span>
+    </div>
+    <div class="tool-activity" id="ta_${tab.id}" style="font-size:11px;color:var(--tool-text);font-family:'SF Mono',monospace;display:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+  </div>`;
+  msgs.appendChild(div);
+  tab.typingEl = div;
+  tab.thinkingStart = Date.now();
+  tab.toolCount = 0;
+  scrollToBottom(tab);
+}
+
+function updateToolActivity(tab, name) {
+  tab.toolCount = (tab.toolCount || 0) + 1;
+  const el = document.getElementById(`ta_${tab.id}`);
+  if(el) { el.style.display = 'block'; el.textContent = `⚙ ${tab.toolCount} tool call${tab.toolCount > 1 ? 's' : ''} · ${name}`; }
+}
+
+function removeTyping(tab) {
+  if(tab.typingEl) { tab.typingEl.remove(); tab.typingEl = null; }
+}
+
+function scrollToBottom(tab) {
+  const msgs = document.querySelector(`.messages[data-tab-id="${tab.id}"]`);
+  if(msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendTool(bubble, name, input, id) {
+  const p = document.createElement('div');
+  p.className = 'tool-pill';
+  if(id) p.dataset.toolId = id;
+  const entries = Object.entries(input ?? {});
+  const preview = entries.length > 0 ? esc(String(Object.values(input)[0]).slice(0, 60)) : '';
+  const fullArgs = entries.map(([k,v]) => `${k}: ${JSON.stringify(v, null, 2)}`).join('\n');
+  p.dataset.name = name;
+  p.dataset.args = fullArgs;
+  p.dataset.result = '';
+  p.innerHTML = `<span class="pill-text"><strong>${esc(name)}</strong>${preview ? ' · ' + preview : ''}</span><span class="pill-arrow">▾</span>`;
+  p.addEventListener('click', () => {
+    const expanded = p.classList.toggle('expanded');
+    const result = p.dataset.result;
+    const resultHtml = result
+      ? `<div style="border-top:1px solid var(--tool-border);margin-top:6px;padding-top:6px;color:var(--muted);white-space:pre-wrap">${esc(result)}</div>`
+      : '';
+    p.querySelector('.pill-text').innerHTML = expanded
+      ? `<pre style="margin:0;white-space:pre-wrap;font-family:inherit">${esc(p.dataset.name + '\n' + p.dataset.args)}</pre>${resultHtml}`
+      : `<strong>${esc(name)}</strong>${preview ? ' · ' + preview : ''}${result ? ' <span style="color:var(--green);font-size:10px">✓</span>' : ''}`;
+  });
+  bubble.appendChild(p);
+  return p;
+}
+
+// ── Thinking state ─────────────────────────────────────
+let thinkingTimer = null;
+let thinkingStart = null;
+
+function fmtTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
+}
+
+function startThinkingTimer() {
+  thinkingStart = Date.now();
+  if(thinkingTimer) clearInterval(thinkingTimer);
+  thinkingTimer = setInterval(() => {
+    // Update status bar for active tab
+    const tab = activeTab();
+    if(tab?.thinking) {
+      const elapsed = fmtTime(Date.now() - thinkingStart);
+      setStatus('thinking', `Thinking… ${elapsed}`);
+    }
+    // Update in-bubble timer for ALL thinking tabs
+    for(const t of tabs.values()) {
+      if(t.thinking && t.thinkingStart) {
+        const el = document.getElementById(`tt_${t.id}`);
+        if(el) el.textContent = fmtTime(Date.now() - t.thinkingStart);
+      }
+    }
+  }, 1000);
+}
+
+function stopThinkingTimer() {
+  if(thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null; }
+  thinkingStart = null;
+}
+
+function updateSendBtn() {
+  const tab = activeTab();
+  if(!tab) { sendBtn.disabled=true; sendBtn.textContent='↑'; sendBtn.className=''; return; }
+  sendBtn.disabled = false;
+  sendBtn.textContent = tab.thinking ? '✕' : '↑';
+  sendBtn.className = tab.thinking ? 'cancel' : '';
+  if(!tab.thinking) setStatus('connected', 'Connected');
+}
+
+function setTabThinking(tab, val) {
+  tab.thinking = val;
+  document.querySelector(`.tab[data-tab-id="${tab.id}"]`)?.classList.toggle('thinking', val);
+}
+
+// ── Send ───────────────────────────────────────────────
+function send() {
+  const tab = activeTab(); if(!tab) return;
+
+  // Cancel if thinking
+  if(tab.thinking) {
+    wsSend({ type: 'cancel', sessionKey: tab.sessionKey });
+    return;
+  }
+
+  const text = inputEl.value.trim();
+  if(!text && tab.attachments.length === 0) return;
+
+  addMsg(tab, 'user', text);
+  tab.history?.push({ role: 'user', text });
+
+  wsSend({
+    type: 'message',
+    sessionKey: tab.sessionKey,
+    text,
+    attachments: tab.attachments,
+  });
+
+  tab.attachments = [];
+  attachPrev.innerHTML = '';
+  attachPrev.classList.remove('visible');
+  inputEl.value = '';
+  autoResize();
+  tab.thinkingStart = Date.now();
+  setTabThinking(tab, true);
+  addTyping(tab);
+  startThinkingTimer();
+  updateSendBtn();
+}
+
+sendBtn.addEventListener('click', send);
+
+// ── Attachments ────────────────────────────────────────
+attachBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0]; if(!file) return;
+  const tab = activeTab(); if(!tab) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    const attachment = { name: file.name, type: file.type, data: fr.result };
+    tab.attachments.push(attachment);
+    const chip = document.createElement('div');
+    chip.className = 'attach-chip';
+    const isImg = file.type.startsWith('image/');
+    chip.innerHTML = isImg
+      ? `<img src="${fr.result}"/><span>${esc(file.name)}</span><button>×</button>`
+      : `<span>📄</span><span>${esc(file.name)}</span><button>×</button>`;
+    chip.querySelector('button').addEventListener('click', () => {
+      tab.attachments = tab.attachments.filter(a => a !== attachment);
+      chip.remove();
+      if(tab.attachments.length === 0) attachPrev.classList.remove('visible');
+    });
+    attachPrev.appendChild(chip);
+    attachPrev.classList.add('visible');
+  };
+  fr.readAsDataURL(file);
+  fileInput.value = '';
+});
+
+// ── Slash command menu ─────────────────────────────────
+const COMMANDS = [
+  // ── Works properly ──
+  { icon: '⚡', name: '/effort',  desc: 'Set thinking effort: low / medium / high',         action: 'effort' },
+  { icon: '🤖', name: '/model',   desc: 'Switch AI model for this session',                  action: 'model' },
+  { icon: '🧹', name: '/clear',   desc: 'Clear chat and start fresh session',                action: 'clear' },
+  { icon: '📦', name: '/compact', desc: 'Ask Claude to summarize and compress context',      action: 'compact' },
+  { icon: '📋', name: '/plan',    desc: 'Enter plan mode — Claude plans before executing',  action: 'plan' },
+  { icon: '📁', name: '/files',   desc: 'Browse files and outputs saved to your Mac',        action: 'files' },
+  // ── Prompts Claude ──
+  { icon: '✅', name: '/todos',   desc: 'List current TODO items in this project',           action: 'prompt', prompt: 'List all the TODO items and pending tasks in this project.' },
+  { icon: '💾', name: '/memory',  desc: 'Show what Claude knows about this project',         action: 'prompt', prompt: 'Summarize what you know about this project: goals, structure, recent changes, and anything important I should know.' },
+  // ── Runs CLI ──
+  { icon: 'ℹ️',  name: '/status',  desc: 'Show Claude Code version info',                    action: 'run_cmd', cmd: 'version' },
+  { icon: '🩺', name: '/doctor',  desc: 'Check Claude Code installation health',             action: 'run_cmd', cmd: 'doctor' },
+  // ── Local UI ──
+  { icon: '❓', name: '/help',    desc: 'Show available commands',                           action: 'help' },
+];
+
+const cmdMenu = $('cmd-menu');
+let cmdSelected = -1, cmdFiltered = [];
+
+function showCmdMenu(filter) {
+  const q = filter.toLowerCase().slice(1);
+  cmdFiltered = COMMANDS.filter(c => c.name.includes(q) || c.desc.toLowerCase().includes(q));
+  cmdSelected = cmdFiltered.length > 0 ? 0 : -1;
+  renderCmdMenu();
+  cmdMenu.classList.add('visible');
+}
+function renderCmdMenu() {
+  cmdMenu.innerHTML = cmdFiltered.map((c,i) =>
+    `<div class="cmd-item${i===cmdSelected?' selected':''}" onclick="selectCmd(${i})">
+      <span class="cmd-icon">${c.icon}</span>
+      <div><div class="cmd-name">${c.name}</div><div class="cmd-desc">${c.desc}</div></div>
+    </div>`).join('');
+}
+function hideCmdMenu() { cmdMenu.classList.remove('visible'); cmdSelected=-1; cmdFiltered=[]; }
+
+window.selectCmd = (i) => {
+  const cmd = cmdFiltered[i]; if(!cmd) return;
+  hideCmdMenu(); inputEl.value = ''; autoResize();
+  execCmd(cmd);
+};
+
+function execCmd(cmd) {
+  const tab = activeTab();
+  switch(cmd.action) {
+    case 'effort':
+      cmdFiltered = [
+        { icon: '🐢', name: '/effort low',    desc: 'Faster, less thorough',  action: 'effort_low' },
+        { icon: '⚡', name: '/effort medium', desc: 'Balanced',                action: 'effort_medium' },
+        { icon: '🔥', name: '/effort high',   desc: 'Slower, most thorough',   action: 'effort_high' },
+      ];
+      cmdSelected = 1; renderCmdMenu(); cmdMenu.classList.add('visible');
+      break;
+    case 'effort_low': case 'effort_medium': case 'effort_high': {
+      const level = cmd.action.split('_')[1];
+      if(tab) { tab.effort = level; wsSend({ type: 'set_effort', level, sessionKey: tab.sessionKey }); addSys(tab, `⚡ Effort set to ${level}`); }
+      break;
+    }
+    case 'model':
+      cmdFiltered = [
+        { icon: '⚡', name: 'claude-sonnet-4-6', desc: 'Sonnet 4.6 · Fast, everyday tasks',           action: 'model_sonnet' },
+        { icon: '🔥', name: 'claude-opus-4-6',   desc: 'Opus 4.6 · Most powerful, complex reasoning', action: 'model_opus' },
+        { icon: '🐢', name: 'claude-haiku-4-5',  desc: 'Haiku 4.5 · Fastest, cheapest',               action: 'model_haiku' },
+      ];
+      cmdSelected = 0; renderCmdMenu(); cmdMenu.classList.add('visible');
+      break;
+    case 'model_sonnet': case 'model_opus': case 'model_haiku': {
+      const modelMap = { model_sonnet: 'claude-sonnet-4-6', model_opus: 'claude-opus-4-6', model_haiku: 'claude-haiku-4-5' };
+      const modelId = modelMap[cmd.action];
+      if(tab) { tab.model = modelId; wsSend({ type: 'set_model', model: modelId, sessionKey: tab.sessionKey }); addSys(tab, `🤖 Model → ${modelId}`); renderModelPicker(); }
+      break;
+    }
+    case 'clear':
+      if(tab) { wsSend({type:'kill_session',sessionKey:tab.sessionKey}); tabs.delete(tab.id); document.querySelector(`.tab[data-tab-id="${tab.id}"]`)?.remove(); document.querySelector(`.pane[data-tab-id="${tab.id}"]`)?.remove(); }
+      createTab(); break;
+    case 'compact':
+      inputEl.value = '/compact'; send(); break;
+    case 'plan': {
+      // Enable plan mode for current session, or create new tab with plan mode
+      if(tab) {
+        tab.planMode = true;
+        wsSend({ type: 'set_plan_mode', enabled: true, sessionKey: tab.sessionKey });
+        addSys(tab, '📋 Plan mode enabled — Claude will show a plan and wait for approval before executing');
+        // Update tab label to show plan mode
+        const tabEl = document.querySelector(`.tab[data-tab-id="${tab.id}"] span:not(.tab-dot):not(.tab-close)`);
+        if(tabEl && !tabEl.nextSibling?.classList?.contains('agent-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'agent-badge';
+          badge.textContent = 'PLAN';
+          tabEl.after(badge);
+        }
+      }
+      break;
+    }
+    case 'run_cmd':
+      if(tab) {
+        addSys(tab, `⏳ Running ${cmd.name}…`);
+        wsSend({ type: 'run_cmd', cmd: cmd.cmd, sessionKey: tab.sessionKey });
+      }
+      break;
+    case 'files': openFiles(); break;
+    case 'help':
+      if(tab) addSys(tab,
+        '✅ /effort /model /clear /compact /files /todos /memory /status /doctor\n' +
+        '💡 Note: Most Claude Code interactive commands only work in the terminal directly.');
+      break;
+  }
+}
+
+inputEl.addEventListener('input', () => {
+  autoResize();
+  const val = inputEl.value;
+  if(val.startsWith('/')) showCmdMenu(val); else hideCmdMenu();
+});
+
+inputEl.addEventListener('keydown', e => {
+  if(cmdMenu.classList.contains('visible')) {
+    if(e.key==='ArrowDown'){e.preventDefault();cmdSelected=Math.min(cmdSelected+1,cmdFiltered.length-1);renderCmdMenu();}
+    else if(e.key==='ArrowUp'){e.preventDefault();cmdSelected=Math.max(cmdSelected-1,0);renderCmdMenu();}
+    else if(e.key==='Enter'){e.preventDefault();if(cmdSelected>=0)selectCmd(cmdSelected);}
+    else if(e.key==='Escape'){hideCmdMenu();}
+    return;
+  }
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}
+});
+
+// ── Settings panel ─────────────────────────────────────
+const settingsPanel = document.getElementById('settings-panel') || (() => {
+  const el = document.createElement('div');
+  el.id = 'settings-panel';
+  el.innerHTML = `
+    <div class="settings-card">
+      <div class="settings-title">Settings <button class="settings-close" id="settings-close">×</button></div>
+      <div class="settings-section">
+        <div class="settings-label">Model</div>
+        <div id="model-picker"></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-label">New Session Options</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="ctrl-btn" onclick="createTab()" style="flex:1">+ Regular</button>
+          <button class="ctrl-btn" onclick="createPlanTab()" style="flex:1">📋 Plan Mode</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-label">Agents</div>
+        <div id="agents-list" style="margin-bottom:8px"></div>
+        <button class="ctrl-btn primary" onclick="showCreateAgent()" style="width:100%">+ Create Agent</button>
+      </div>
+      <div id="create-agent-form" style="display:none;margin-top:12px">
+        <div class="settings-label">New Agent</div>
+        <input id="agent-name-input" placeholder="Name (e.g. code-reviewer)" style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none;margin-bottom:8px;-webkit-appearance:none"/>
+        <textarea id="agent-prompt-input" rows="4" placeholder="System prompt — describe what this agent does and how it behaves…" style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none;resize:none;margin-bottom:8px;-webkit-appearance:none"></textarea>
+        <div style="display:flex;gap:8px">
+          <button class="ctrl-btn" onclick="hideCreateAgent()" style="flex:1">Cancel</button>
+          <button class="ctrl-btn primary" onclick="saveAgent()" style="flex:1">Save Agent</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-label">Files & Outputs</div>
+        <button class="ctrl-btn" onclick="openFiles()" style="width:100%">📁 Browse Files</button>
+        <div style="height:8px"></div>
+        <button class="ctrl-btn" onclick="window.open('/logs','_blank')" style="width:100%">🪵 View Server Logs</button>
+      </div>
+      <div class="settings-section">
+        <div class="settings-label">Sessions</div>
+        <div id="sessions-list"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  return el;
+})();
+
+settingsPanel.addEventListener('click', e => { if(e.target === settingsPanel) settingsPanel.classList.remove('visible'); });
+
+const settingsCloseBtn = $('settings-close');
+if(settingsCloseBtn) settingsCloseBtn.addEventListener('click', () => settingsPanel.classList.remove('visible'));
+
+// ── Model picker ───────────────────────────────────────
+const MODELS = [
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', desc: 'Fast · Everyday tasks (default)' },
+  { id: 'claude-opus-4-6',   label: 'Opus 4.6',   desc: 'Powerful · Complex coding & reasoning' },
+  { id: 'claude-haiku-4-5',  label: 'Haiku 4.5',  desc: 'Fastest · Quick questions, cheap' },
+];
+
+function renderModelPicker() {
+  const el = $('model-picker'); if(!el) return;
+  const tab = activeTab();
+  const current = tab?.model || 'sonnet';
+  el.innerHTML = MODELS.map(m => `
+    <div onclick="selectModel('${m.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:${current===m.id?'var(--surface3)':'var(--surface2)'};border:1px solid ${current===m.id?'var(--accent)':'var(--border)'};cursor:pointer;margin-bottom:6px">
+      <div style="width:14px;height:14px;border-radius:50%;border:2px solid ${current===m.id?'var(--accent)':'var(--muted)'};background:${current===m.id?'var(--accent)':'transparent'};flex-shrink:0"></div>
+      <div><div style="font-size:13px;font-weight:600;color:${current===m.id?'var(--accent)':'var(--text)'}">${m.label}</div><div style="font-size:11px;color:var(--muted)">${m.desc}</div></div>
+    </div>`).join('');
+}
+
+window.selectModel = (modelId) => {
+  const tab = activeTab(); if(!tab) return;
+  tab.model = modelId;
+  wsSend({ type: 'set_model', model: modelId, sessionKey: tab.sessionKey });
+  renderModelPicker();
+  addSys(tab, `🤖 Model set to ${MODELS.find(m=>m.id===modelId)?.label || modelId}`);
+};
+
+settingsBtn.addEventListener('click', () => {
+  updateSessionsList();
+  renderModelPicker();
+  loadAgents();
+  settingsPanel.classList.add('visible');
+});
+
+// ── Plan tab helper ────────────────────────────────────
+window.createPlanTab = () => {
+  settingsPanel.classList.remove('visible');
+  createTab(null, { planMode: true });
+};
+
+// ── Agents ─────────────────────────────────────────────
+let agentsList = [];
+
+function loadAgents() {
+  wsSend({ type: 'list_agents' });
+}
+
+function renderAgents(agents) {
+  agentsList = agents;
+  const el = $('agents-list'); if(!el) return;
+  if(!agents.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0">No custom agents yet. Built-ins always available.</div>';
+    return;
+  }
+  el.innerHTML = agents.map(a => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:13px;font-weight:600">${esc(a.name)}</div>
+        <div style="font-size:11px;color:var(--muted)">${esc(a.desc || 'Custom agent')}</div>
+      </div>
+      <button onclick="startAgentTab('${esc(a.name)}')" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer">Start</button>
+    </div>`).join('');
+}
+
+window.startAgentTab = (agentName) => {
+  settingsPanel.classList.remove('visible');
+  createTab(`🤖 ${agentName}`, { agentName });
+};
+
+window.showCreateAgent = () => { $('create-agent-form').style.display = 'block'; };
+window.hideCreateAgent = () => { $('create-agent-form').style.display = 'none'; };
+
+window.saveAgent = () => {
+  const name = $('agent-name-input').value.trim().replace(/[^a-z0-9\-_]/gi, '-').toLowerCase();
+  const prompt = $('agent-prompt-input').value.trim();
+  if(!name || !prompt) { alert('Name and prompt required'); return; }
+  wsSend({ type: 'create_agent', name, prompt });
+  hideCreateAgent();
+  $('agent-name-input').value = '';
+  $('agent-prompt-input').value = '';
+};
+
+function updateSessionsList() {
+  const el = $('sessions-list'); if(!el) return;
+  el.innerHTML = [...tabs.values()].map(t =>
+    `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:13px">${esc(t.label)} ${t.thinking?'🟠':'⚪'}</span>
+      <button onclick="closeTab(${t.id})" style="background:none;border:none;color:var(--error-text);cursor:pointer;font-size:13px">Kill</button>
+    </div>`).join('');
+}
+
+window.closeTab = closeTab;
+
+// ── File browser ────────────────────────────────────────
+window.openFiles = () => { window.open('/files', '_blank'); };
+
+// ── Session restore ────────────────────────────────────
+function restoreSession(s) {
+  // Build tab directly — do NOT call createTab() which sends new_session and creates ghost sessions
+  const id = ++tabCounter;
+  const tab = {
+    id, label: s.label, sessionKey: s.sessionKey,
+    thinking: false, currentBubble: null, typingEl: null, attachments: [],
+    model: s.model || 'claude-sonnet-4-6', effort: s.effort || 'high',
+    planMode: s.planMode || false, agentName: s.agentName || null,
+    toolCount: 0,
+  };
+  tabs.set(id, tab);
+
+  // Tab button
+  const tabEl = document.createElement('div');
+  tabEl.className = 'tab';
+  tabEl.dataset.tabId = id;
+  tabEl.innerHTML = `<span class="tab-dot"></span><span>${esc(s.label)}</span><button class="tab-close" data-tab-id="${id}">×</button>`;
+  tabEl.addEventListener('click', e => { if(!e.target.classList.contains('tab-close')) switchTab(id); });
+  tabEl.querySelector('.tab-close').addEventListener('click', e => { e.stopPropagation(); closeTab(id); });
+  tabsBar.insertBefore(tabEl, newTabBtn);
+
+  // Pane
+  const pane = document.createElement('div');
+  pane.className = 'pane';
+  pane.dataset.tabId = id;
+  const msgs = document.createElement('div');
+  msgs.className = 'messages';
+  msgs.dataset.tabId = id;
+  pane.appendChild(msgs);
+  panes.appendChild(pane);
+
+  switchTab(id);
+
+  // Replay history
+  (s.history || []).forEach(m => {
+    if(m.role === 'user') addMsg(tab, 'user', m.text);
+    else if(m.role === 'claude') {
+      const b = createBubble(tab, 'claude');
+      b.dataset.raw = m.text;
+      b.innerHTML = renderMd(m.text);
+    } else if(m.role === 'system') addSys(tab, m.text);
+  });
+
+  if(s.history && s.history.length) addSys(tab, '↩ Session restored');
+
+  if(s.thinking) {
+    tab.thinkingStart = Date.now();
+    setTabThinking(tab, true);
+    addTyping(tab);
+    startThinkingTimer();
+    updateSendBtn();
+  }
+}
+
+// ── Markdown renderer ──────────────────────────────────
+function inlineMd(t) {
+  return t.replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g,'<em>$1</em>');
+}
+
+function renderMd(text) {
+  const lines = text.split('\n');
+  let html = '', inCode = false, codeLang = '', codeLines = [], inTable = false, tableLines = [];
+
+  const flushTable = () => {
+    if(!tableLines.length) return;
+    const [header, sep, ...rows] = tableLines;
+    const cols = header.split('|').filter((_,i,a) => i>0 && i<a.length-1);
+    let t = '<div style="overflow-x:auto;margin:8px 0"><table style="border-collapse:collapse;width:100%;font-size:13px">';
+    t += '<thead><tr>' + cols.map(c=>`<th style="border:1px solid var(--border);padding:6px 10px;background:var(--surface2);text-align:left">${inlineMd(c.trim())}</th>`).join('') + '</tr></thead>';
+    t += '<tbody>';
+    for(const row of rows) {
+      const cells = row.split('|').filter((_,i,a) => i>0 && i<a.length-1);
+      t += '<tr>' + cells.map(c=>`<td style="border:1px solid var(--border);padding:6px 10px">${inlineMd(c.trim())}</td>`).join('') + '</tr>';
+    }
+    t += '</tbody></table></div>';
+    html += t;
+    tableLines = []; inTable = false;
+  };
+
+  for(const line of lines) {
+    if(line.startsWith('```')) {
+      if(inTable) flushTable();
+      if(!inCode) { inCode=true; codeLang=line.slice(3).trim(); codeLines=[]; }
+      else { html+=`<pre><code class="language-${esc(codeLang)}">${esc(codeLines.join('\n'))}</code></pre>`; inCode=false; }
+      continue;
+    }
+    if(inCode) { codeLines.push(line); continue; }
+
+    if(line.includes('|')) {
+      if(!inTable) { inTable=true; tableLines=[]; }
+      tableLines.push(line);
+      continue;
+    } else if(inTable) { flushTable(); }
+
+    if(line.startsWith('### ')) html+=`<p><strong>${inlineMd(esc(line.slice(4)))}</strong></p>`;
+    else if(line.startsWith('## ')) html+=`<p><strong>${inlineMd(esc(line.slice(3)))}</strong></p>`;
+    else if(line.startsWith('# ')) html+=`<p><strong>${inlineMd(esc(line.slice(2)))}</strong></p>`;
+    else if(line.startsWith('- ') || line.startsWith('* ')) html+=`<p>• ${inlineMd(esc(line.slice(2)))}</p>`;
+    else if(/^\d+\. /.test(line)) html+=`<p>${inlineMd(esc(line))}</p>`;
+    else if(line.trim()==='') html+=``;
+    else html+=`<p>${inlineMd(esc(line))}</p>`;
+  }
+  if(inCode) html+=`<pre><code>${esc(codeLines.join('\n'))}</code></pre>`;
+  if(inTable) flushTable();
+  return html;
+}
+
+function esc(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function autoResize() { inputEl.style.height='auto'; inputEl.style.height=Math.min(inputEl.scrollHeight,130)+'px'; }
+
+function setStatus(cls, text) { statusDot.className=`status-dot ${cls}`; statusText.textContent=text; }
+
+connect();
+</script>
+</body>
+</html>
