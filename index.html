@@ -90,6 +90,9 @@
     #tabs-bar::-webkit-scrollbar { display: none; }
     .tab { display: flex; align-items: center; gap: 6px; padding: 9px 12px; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; transition: all 0.15s; flex-shrink: 0; }
     .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+    .tab.terminal { opacity: 0.65; font-style: italic; }
+    .tab.terminal:hover { opacity: 0.9; }
+    .tab.terminal.active { opacity: 1; border-bottom-color: #5b8fa8; color: var(--text); font-style: normal; }
     .tab .tab-close { font-size: 14px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0; line-height: 1; margin-left: 2px; }
     .tab .tab-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: none; }
     .tab.thinking .tab-dot { display: block; animation: pulse 1s infinite; }
@@ -362,6 +365,8 @@ function handle(msg) {
       } else {
         createTab();
       }
+      // Load terminal sessions from Mac into the tab bar
+      wsSend({ type: 'list_terminal_sessions' });
       break;
 
     case 'auth_fail':
@@ -452,6 +457,47 @@ function handle(msg) {
     case 'session_init': {
       const tab = tabByKey(msg.sessionKey);
       if(tab) { tab.claudeSessionId = msg.sessionId; }
+      break;
+    }
+
+    case 'terminal_sessions': {
+      renderTerminalTabs(msg.sessions || []);
+      break;
+    }
+
+    case 'terminal_history': {
+      // Find the tab that requested this history
+      const tab = [...tabs.values()].find(t => t._pendingTerminalSessionId === msg.sessionId);
+      if (!tab) break;
+      delete tab._pendingTerminalSessionId;
+
+      const msgs = document.querySelector(`.messages[data-tab-id="${tab.id}"]`);
+      if (!msgs) break;
+
+      // Clear the "loading..." system message
+      msgs.querySelectorAll('.sys-msg').forEach((el, i, arr) => {
+        if (el.textContent.includes('Loading conversation history')) el.remove();
+      });
+
+      if (msg.error || !msg.messages.length) {
+        addSys(tab, `💬 No history found — send a message to continue`);
+        break;
+      }
+
+      // Replay messages
+      msg.messages.forEach(m => {
+        if (m.role === 'user') {
+          addMsg(tab, 'user', m.text);
+        } else if (m.role === 'claude') {
+          const b = createBubble(tab, 'claude');
+          b.dataset.raw = m.text;
+          b.innerHTML = renderMd(m.text);
+        }
+      });
+
+      addSys(tab, `↩ Last ${msg.messages.length} messages shown · Send a message to continue`);
+      // Scroll to bottom
+      msgs.scrollTop = msgs.scrollHeight;
       break;
     }
 
@@ -1080,6 +1126,72 @@ window.closeTab = closeTab;
 window.openFiles = () => { window.open('/files', '_blank'); };
 
 // ── Session restore ────────────────────────────────────
+// ── Terminal session tabs (from Mac's ~/.claude/history.jsonl) ──────────
+function renderTerminalTabs(sessions) {
+  // Remove any existing ghost tabs
+  document.querySelectorAll('.tab.terminal-ghost').forEach(el => el.remove());
+  if (!sessions.length) return;
+
+  sessions.forEach(s => {
+    const el = document.createElement('div');
+    el.className = 'tab terminal terminal-ghost';
+    el.dataset.terminalSessionId = s.sessionId;
+    el.title = s.projectPath || s.project;
+    el.innerHTML = `<span style="font-size:11px;opacity:0.7">⌨</span><span>${esc(s.project)}</span>`;
+    el.addEventListener('click', () => adoptTerminalSession(s.sessionId, s.project, s.projectPath, el));
+    tabsBar.insertBefore(el, newTabBtn);
+  });
+}
+
+function adoptTerminalSession(sessionId, project, projectPath, ghostEl) {
+  // Remove the ghost tab
+  ghostEl?.remove();
+
+  const num = nextTabNumber();
+  const id = ++tabCounter;
+  const tabLabel = `⌨ ${project}`;
+  const sessionKey = `s_${Date.now()}_${id}`;
+  const tab = {
+    id, label: tabLabel, sessionKey,
+    thinking: false, currentBubble: null, typingEl: null, attachments: [],
+    model: 'claude-sonnet-4-6', effort: 'high', planMode: false, agentName: null,
+    toolCount: 0,
+  };
+  tabs.set(id, tab);
+
+  // Tab button — starts as terminal style, becomes normal once active
+  const tabEl = document.createElement('div');
+  tabEl.className = 'tab terminal';
+  tabEl.dataset.tabId = id;
+  tabEl.innerHTML = `<span class="tab-dot"></span><span>${esc(tabLabel)}</span><button class="tab-close" data-tab-id="${id}">×</button>`;
+  tabEl.addEventListener('click', e => { if(!e.target.classList.contains('tab-close')) switchTab(id); });
+  tabEl.querySelector('.tab-close').addEventListener('click', e => { e.stopPropagation(); closeTab(id); });
+  tabsBar.insertBefore(tabEl, newTabBtn);
+
+  // Pane
+  const pane = document.createElement('div');
+  pane.className = 'pane';
+  pane.dataset.tabId = id;
+  const msgs = document.createElement('div');
+  msgs.className = 'messages';
+  msgs.dataset.tabId = id;
+  pane.appendChild(msgs);
+  panes.appendChild(pane);
+
+  switchTab(id);
+
+  // Register with server — pass resumeSessionId so server pre-sets claudeSessionId
+  wsSend({ type: 'new_session', sessionKey, label: tabLabel, resumeSessionId: sessionId });
+
+  // Show loading state while we fetch history
+  addSys(tab, `⌨ Resumed from Mac terminal · 📁 ${project}`);
+  addSys(tab, `⏳ Loading conversation history...`);
+
+  // Ask server to read the session JSONL file
+  tab._pendingTerminalSessionId = sessionId;
+  wsSend({ type: 'get_terminal_history', sessionId, projectPath });
+}
+
 function restoreSession(s) {
   // Build tab directly — do NOT call createTab() which sends new_session and creates ghost sessions
   const id = ++tabCounter;
