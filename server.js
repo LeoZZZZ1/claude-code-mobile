@@ -351,6 +351,100 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    // ── Get history for a terminal session ───────────────────────────────
+    if (msg.type === 'get_terminal_history') {
+      const { sessionId, projectPath } = msg;
+      try {
+        // Encode project path the same way Claude Code does: replace / with -
+        const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+        let sessionFile = null;
+
+        // Try direct encoding first: /home/user/myapp → -home-user-myapp-
+        if (projectPath) {
+          const encoded = projectPath.replace(/\//g, '-') + '-';
+          const candidate = path.join(projectsDir, encoded, `${sessionId}.jsonl`);
+          if (fs.existsSync(candidate)) sessionFile = candidate;
+        }
+
+        // Fallback: search all project dirs for this sessionId
+        if (!sessionFile && fs.existsSync(projectsDir)) {
+          for (const dir of fs.readdirSync(projectsDir)) {
+            const candidate = path.join(projectsDir, dir, `${sessionId}.jsonl`);
+            if (fs.existsSync(candidate)) { sessionFile = candidate; break; }
+          }
+        }
+
+        if (!sessionFile) {
+          send({ type: 'terminal_history', sessionId, messages: [], error: 'Session file not found' });
+          return;
+        }
+
+        const lines = fs.readFileSync(sessionFile, 'utf8').trim().split('\n').filter(Boolean);
+        const messages = [];
+        for (const line of lines) {
+          try {
+            const e = JSON.parse(line);
+            // Claude Code JSONL format: {type: 'user'|'assistant', message: {role, content}}
+            if (e.type === 'user' && e.message?.content) {
+              const content = Array.isArray(e.message.content)
+                ? e.message.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+                : String(e.message.content);
+              if (content.trim()) messages.push({ role: 'user', text: content.trim() });
+            } else if (e.type === 'assistant' && e.message?.content) {
+              const content = Array.isArray(e.message.content)
+                ? e.message.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+                : String(e.message.content);
+              if (content.trim()) messages.push({ role: 'claude', text: content.trim() });
+            }
+          } catch(err) { /* skip malformed lines */ }
+        }
+        // Send last 20 messages to avoid overwhelming the UI
+        const recent = messages.slice(-20);
+        send({ type: 'terminal_history', sessionId, messages: recent });
+        console.log(`📖 [${sessionId}] Sent ${recent.length} history messages`);
+      } catch(e) {
+        console.error('get_terminal_history error:', e.message);
+        send({ type: 'terminal_history', sessionId, messages: [], error: e.message });
+      }
+      return;
+    }
+
+    // ── List terminal sessions from ~/.claude/history.jsonl ──────────────
+    if (msg.type === 'list_terminal_sessions') {
+      const histFile = path.join(os.homedir(), '.claude', 'history.jsonl');
+      try {
+        if (!fs.existsSync(histFile)) { send({ type: 'terminal_sessions', sessions: [] }); return; }
+        const lines = fs.readFileSync(histFile, 'utf8').trim().split('\n').filter(Boolean);
+        // IDs already open as mobile sessions — skip duplicates
+        const openIds = new Set([...globalSessions.values()].map(s => s.claudeSessionId).filter(Boolean));
+        const HOURS = 24;
+        const cutoff = Date.now() - (HOURS * 60 * 60 * 1000);
+        const seen = new Set();
+        const sessions = lines
+          .map(l => { try { return JSON.parse(l); } catch(e) { return null; } })
+          .filter(e => e && e.sessionId && (e.timestamp || 0) >= cutoff)
+          .reverse()
+          .filter(e => {
+            if (seen.has(e.sessionId) || openIds.has(e.sessionId)) return false;
+            seen.add(e.sessionId);
+            return true;
+          })
+          .slice(0, 20)
+          .map(e => ({
+            sessionId:   e.sessionId,
+            project:     e.project ? path.basename(e.project) : 'Terminal',
+            projectPath: e.project || '',
+            timestamp:   e.timestamp || 0,
+          }));
+        send({ type: 'terminal_sessions', sessions });
+        console.log(`📋 Sent ${sessions.length} terminal sessions`);
+      } catch(e) {
+        console.error('list_terminal_sessions error:', e.message);
+        send({ type: 'terminal_sessions', sessions: [] });
+      }
+      return;
+    }
+
     if (msg.type === 'kill_session') {
       const s = globalSessions.get(key);
       if (s?.proc) s.proc.kill('SIGTERM');
@@ -409,6 +503,9 @@ wss.on('connection', (ws) => {
         const s = newSession(key, msg.label || 'Session');
         s.planMode = msg.planMode || false;
         s.agentName = msg.agentName || null;
+        // If resuming a terminal session, pre-set the claudeSessionId so
+        // the first message automatically uses --resume <id>
+        if (msg.resumeSessionId) s.claudeSessionId = msg.resumeSessionId;
         globalSessions.set(key, s);
       }
       const s = globalSessions.get(key);
